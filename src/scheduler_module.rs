@@ -25,15 +25,25 @@ impl Scheduler {
         // 检查
         let dependency_list = config.configs.last().unwrap().clone();
         let mut guard = software_manager().lock().unwrap();
-        let download_list =  guard.check(dependency_list);
+        let download_list ;
+        match  guard.check(dependency_list){
+            Ok(list) => download_list = list,
+            Err(e) => {
+                log::error!("bug");
+                return;
+            }
+            
+        }
         // 下载
-        guard.install(download_list);
+        let download_result = guard.install(download_list);
+        // todo 向上输出全局类型的错误
     }
     // todo 更新某指定依赖
     // todo 垃圾回收
     pub fn garbage_collection(&self) {
         // 调用软件管理器
         let mut guard = software_manager().lock().unwrap();
-        guard.garbage_collection();
+        let result = guard.garbage_collection();
+        // todo 向上输出全局类型的错误
     }
 }

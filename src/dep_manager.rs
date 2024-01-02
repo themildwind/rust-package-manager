@@ -1,23 +1,40 @@
 use std::{collections::HashMap, fmt, ops::Deref};
 
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use lazy_static::lazy_static;
 use crate::{version_mod::Version, software_manager::Software};
 
 
 
 // 
-#[derive(Clone, Debug, Deserialize,PartialEq, Eq,Hash)]
+#[derive(Clone, Debug, Deserialize,Serialize,PartialEq, Eq,Hash)]
 pub struct Dependency
 {
     pub archive: String,
-    pub version: String,
     pub component: String,
     pub origin: String,
     pub label: String,
     pub architecture: String,
     pub download : String,
     pub others: String,
+    pub version: Version,
+}
+impl Dependency{
+    fn new () -> Dependency{
+        return Dependency{
+            archive: String::new(),
+            version: Version::new("0".to_string()),
+            component: String::new(),
+            origin: String::new(),
+            label: String::new(),
+            architecture: String::new(),
+            download : String::new(),
+            others: String::new(),
+        };
+    }
+    pub fn download(&self) -> String{
+        return self.download.clone();
+    }
 }
 // 实现 Deref trait，指定解引用的行为
 // impl Deref for Dependency {
@@ -39,7 +56,7 @@ pub struct Dependency
 // 表示一个程序的所依赖的软件包集合
 // 每个应用程序所有，会根据配置文件构建
 // 并且构建版本链
-#[derive(Clone, Debug,Deserialize, PartialEq, Eq,Hash)]
+#[derive(Clone, Debug,Deserialize, PartialEq, Eq,Hash,Serialize)]
 pub struct Dependency_List{
     // 一个数组，表示所有依赖的包
     pub dependencies : Vec<Dependency>,

@@ -19,8 +19,10 @@ impl ProfileHandler{
     pub fn analyse (&self, path : String) -> Configuration{
         // 读取 TOML 文件内容
         let toml_content = fs::read_to_string(path).expect("Unable to read file");
+        println!("{:?}", toml_content);
         // 解析 TOML 格式数据
         let list: Dependency_List = toml::from_str(&toml_content).expect("Failed to parse TOML");
+        
         println!("{:?}", list);
         // 初始化一个新的Configuratio
         let configuration = Configuration::new(list, "待实现".to_string(), Version::new("待实现".to_string()));
