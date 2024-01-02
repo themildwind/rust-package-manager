@@ -1,0 +1,22 @@
+[package]
+name = "tmp"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+toml = "0.5"
+serde = "1.0"
+serde_derive = "1.0"
+lazy_static = "1.4"
+# simple_logger = { git = "https://git.mirrors.dragonos.org/DragonOS-Community/rust-simple_logger.git", "rev" = "36ab404868" }
+log = "0.4.14"
+simple_logger = "2.1.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+tokio = { version = "1", features = ["full"] }
+
+#
+num-traits = { git = "https://git.mirrors.dragonos.org/DragonOS-Community/num-traits.git", rev="1597c1c", default-features = false }
+num = { version = "0.4.0", default-features = false }
+num-derive = "0.3"
