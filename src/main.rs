@@ -1,6 +1,6 @@
 use simple_logger::{SimpleLogger};
 use toml::to_string_pretty;
-use crate::dep_manager::{Dependency, Dependency_List};
+use crate::dep_manager::{Dependency, DependencyList};
 use crate::scheduler_module::scheduler;
 use crate::version_mod::Version;
 // 大致流程，每个应用程序有个按照规约的配置文件，读取文件，检查依赖，下载未拥有的依赖，
