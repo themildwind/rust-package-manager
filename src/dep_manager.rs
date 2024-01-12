@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, ops::Deref, sync::{Arc, Mutex}};
+use std::{collections::HashMap, fmt, ops::Deref, sync::{Arc, Mutex, MutexGuard}, hash::{Hash, Hasher}};
 use serde_derive::{Deserialize, Serialize};
 use lazy_static::lazy_static;
 use crate::{version_mod::Version, software_manager::Software};
@@ -58,26 +58,68 @@ impl DependencyList{
     }
 }
 
-#[derive(Clone,Debug,PartialEq, Eq,Hash)]
+#[derive(Debug)]
 // 表示一个程序的配置文件。一对一
 pub struct Configuration{
-    // 持有所有的版本
-    pub configs : Vec<DependencyList>,
+    
     // 标记这个配置文件
     pub archive: String,
+    inner : Mutex<InnerConfiguration>
+}
+#[derive(Debug, Clone,PartialEq, Eq,Hash)]
+pub struct InnerConfiguration {
+    // 持有所有的版本
+    pub vec : Vec<DependencyList>,
     pub age: usize,
 }
+impl InnerConfiguration{
+    pub fn age(&self) -> usize {
+        return self.age;
+    }
+    pub fn vec(&self) -> Vec<DependencyList> {
+        return self.vec.clone();
+    }
+    // 
+    fn add(&mut self) {
+        self.age += 1;
+    }
+    pub fn update(&mut self, list: DependencyList) {
+        self.vec.push(list);
+        self.add();
+    }
+}
+// 实现 PartialEq 和 Eq trait
+impl PartialEq for Configuration {
+    fn eq(&self, other: &Self) -> bool {
+        self.archive == other.archive
+    }
+}
 
+impl Eq for Configuration {}
+//
+// 实现 Hash trait
+impl Hash for Configuration {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // 将 key 和 value 组合起来计算哈希值
+        self.archive.hash(state);
+    }
+}
 impl  Configuration  {
     // 传入依赖列表
-    pub fn new(list : DependencyList, archive : String, age : usize) -> Configuration{
+    pub fn new(list : DependencyList, archive : String, age : usize) -> Arc<Configuration>{
         let mut vec : Vec<DependencyList> = Vec::new();
         vec.push(list);
-        return Configuration{
-            configs : vec,
+        return Arc::new(Configuration{
             archive : archive,
-            age : age,
-        };
+            inner : Mutex::new(InnerConfiguration{
+                vec : vec,
+                age : age,
+            })
+        });
+    }
+
+    pub fn inner(&self) -> Option<MutexGuard<InnerConfiguration>>{
+        self.inner.lock().ok()
     }
 }
 
@@ -88,6 +130,8 @@ pub enum ConfigurationManagerError {
     ConfigurationNotFound(String),
     // 更新失败
     ConfigurationUpdateFailed,
+    // 加锁失败
+    ConfigurationLockFailed,
 }
 // 配置文件管理器作为单例
 lazy_static! {
@@ -114,17 +158,17 @@ pub enum ConfigurationUpdateMode {
 }
 pub struct ConfigurationManager {
     // 保存所有程序的配置文件
-    configurations : Vec<Configuration>,
+    configurations : Vec<Arc<Configuration>>,
     // 用map记录
-    config_hashmap : HashMap<Configuration, bool>,
-    archive_hashmap : HashMap<String, Configuration>,
+    config_hashmap : HashMap<Arc<Configuration>, bool>,
+    archive_hashmap : HashMap<String, Arc<Configuration>>,
 }
 impl ConfigurationManager {
     fn new() -> ConfigurationManager {
         return ConfigurationManager{ configurations :  Vec::new() , config_hashmap : HashMap::new(), archive_hashmap : HashMap::new()};
     }
     // 加入新的配置文件。一般是在第一次解析时添加
-    pub fn insert(&mut self, configuration : Configuration) -> Result<(), ConfigurationManagerError>{
+    pub fn insert(&mut self, configuration : Arc<Configuration>) -> Result<(), ConfigurationManagerError>{
         if !self.config_hashmap.contains_key(&configuration){
             self.configurations.push(configuration.clone());
             self.config_hashmap.insert(configuration.clone(), true);
@@ -137,7 +181,7 @@ impl ConfigurationManager {
     // 
     pub fn delete(&mut self, configuration : Configuration) -> Result<(), ConfigurationManagerError>{
         if self.config_hashmap.contains_key(&configuration){
-            self.configurations.retain(|config| config != &configuration);
+            self.configurations.retain(|config| !configuration.eq(&config));
         }else {
             return Err(ConfigurationManagerError::ConfigurationNotFound(configuration.archive.clone()));
         }
@@ -145,18 +189,19 @@ impl ConfigurationManager {
     }
 
     // 更新某个配置
-    pub fn update(&mut self, archive : String, mode : ConfigurationUpdateMode) -> Result<Configuration,ConfigurationManagerError>{
+    pub fn update(&mut self, archive : String, mode : ConfigurationUpdateMode) -> Result<DependencyList,ConfigurationManagerError>{
         if !self.archive_hashmap.contains_key(&archive) {
             // 配置文件不存在
             return Err(ConfigurationManagerError::ConfigurationNotFound(archive.clone()));
         }
         let config = self.archive_hashmap.get(&archive).unwrap();
-        let new_config ;
+        let list : DependencyList;
+        // 传入引用，实例被修改，添加新的依赖列表
         match configuration_update_unit().get_new_configuration(config.clone(), mode) {
-            Ok(c) => new_config = c,
+            Ok(l) => {list = l},
             Err(e) => return Err(e),
         }
-        return Ok(new_config);
+        return Ok(list);
     }
 }
 
@@ -176,10 +221,18 @@ impl ConfigurationUpdateUnit {
     pub fn new() -> ConfigurationUpdateUnit {
         ConfigurationUpdateUnit
     }
-    pub fn get_new_configuration(&self, configuration : Configuration, mode : ConfigurationUpdateMode) -> Result<Configuration,ConfigurationManagerError>{
-        let mut new_configuration = configuration.clone();
+    pub fn get_new_configuration(&self, configuration : Arc<Configuration>, mode : ConfigurationUpdateMode) -> Result<DependencyList,ConfigurationManagerError>{
+        let inner_guard = configuration.inner();
+        if inner_guard.is_none() {
+            return Err(ConfigurationManagerError::ConfigurationLockFailed);
+        }
+        let guard = inner_guard.unwrap();
         // todo 上网更新
-        new_configuration.age = configuration.age + 1;
-        return Ok(new_configuration);
+        let mut list = DependencyList::new(Vec::new());
+        if let tmp = guard.vec().last().is_some() {
+            list = guard.vec().last().unwrap().clone();
+        }
+        // 表示更新成功
+        return Ok(list);
     }
 }

@@ -22,17 +22,19 @@ impl ProfileHandler{
     
     
     // 读取txt文件解析Template
-    pub fn analyse (&self, path : String) -> Configuration{
+    pub fn analyse (&self, path : String) -> DependencyList{
         // 读取 TOML 文件内容
         let toml_content = fs::read_to_string(path).expect("Unable to read file");
+        //println!("{:?}", toml_content);
+        if toml_content.is_empty() {
+            return DependencyList::new(vec![]);
+        }
         //println!("{:?}", toml_content);
         // 解析 TOML 格式数据
         let vec: DependencyListTomlHandler = toml::from_str(&toml_content).expect("Failed to parse TOML");
         let dependency_list = DependencyList::new(vec.dependencies.clone());
-        println!("{:?}", dependency_list);
-        // 初始化一个新的Configuratio
-        let configuration = Configuration::new(dependency_list, "待实现".to_string(), 0);
+        //println!("{:?}", dependency_list);
         // 完成一个程序的配置文件的解析，接下来交给后续管理器检查下载
-        return configuration;
+        return dependency_list;
     }
 }

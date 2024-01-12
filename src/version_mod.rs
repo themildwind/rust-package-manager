@@ -7,7 +7,7 @@ impl Version {
     pub fn new (version : String) -> Version{
         return Version{ version : version};
     }
-    pub fn version(&self) -> &String {
-        return &self.version;
+    pub fn version(&self) -> String {
+        return self.version.clone();
     }
 }

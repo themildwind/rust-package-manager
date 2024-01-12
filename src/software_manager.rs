@@ -1,4 +1,4 @@
-use crate::dep_manager::{Dependency, DependencyList};
+use crate::{dep_manager::{Dependency, DependencyList}, run_profile::profile_handler};
 use lazy_static::lazy_static;
 use serde::de;
 use simple_logger::SimpleLogger;
@@ -241,6 +241,7 @@ impl SoftwareManager {
                 Ok(s) => software = s,
                 Err(err) => return Err(err),
             }
+            //println!("{:?}", software);
             // 加入新下载的依赖包
             self.insert(software, dependency.clone());
         }
@@ -269,7 +270,10 @@ impl SoftwareManager {
     }
     // todo 查找依赖包的依赖
     pub fn get_dep(dep: Arc<Dependency>) -> Result<DependencyList, SoftwareManagerError> {
-        return Ok(DependencyList::new(Vec::new()));
+        // 本地测试
+        let list = profile_handler().analyse("software-package/".to_string() + &dep.archive.clone() +"-" + &dep.version.version() + ".txt");
+        //
+        return Ok(list);
     }
 }
 
@@ -298,7 +302,7 @@ impl DownloadUnit {
     // 同步
     fn download_sync() -> Result<(), reqwest::Error> {
         let body = reqwest::blocking::get("https://www.rust-lang.org")?.text()?;
-        println!("body = {:?}", body);
+        //println!("body = {:?}", body);
         Ok(())
     }
     // 异步

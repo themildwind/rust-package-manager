@@ -1,0 +1,24 @@
+# 使用toml格式
+[[dependencies]]
+archive = "d"
+component = "main"
+origin = "Ubuntu"
+label = "Ubuntu"
+architecture = "amd64"
+download = "htpps://example.com/ubuntu-22.04.1-live-server-amd64.iso"
+others = "其他"
+
+[dependencies.version]
+version = "1"
+
+[[dependencies]]
+archive = "a"
+component = "main"
+origin = "Ubuntu"
+label = "Ubuntu"
+architecture = "amd64"
+download = "htpps://example.com/ubuntu-22.04.1-live-server-amd64.iso"
+others = "其他"
+
+[dependencies.version]
+version = "1"
