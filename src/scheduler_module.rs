@@ -42,7 +42,6 @@ impl Scheduler {
         }
         println!(" over ");
         // 下载
-        // todo 向上输出全局类型的错误
         let download_result = software_guard.install(download_list);
         match download_result {
             Ok(_) => {},
@@ -67,7 +66,7 @@ impl Scheduler {
         }
     }
     // 
-    pub fn download_install (&self, dependency_list: DependencyList) {
+    pub fn download_install (&self, dependency_list: DependencyList) -> Result<(),GlobalError>{
         // 检查
         let mut software_guard = software_manager().lock().unwrap();
         let download_list ;
@@ -75,16 +74,23 @@ impl Scheduler {
             Ok(list) => download_list = list,
             Err(e) => {
                 log::error!("bug");
-                return;
+                return Err(GlobalError::from(e));
             }
             
         }
         // 下载
-        // todo 向上输出全局类型的错误
         let download_result = software_guard.install(download_list);
-       // ???
+        match download_result {
+            Ok(_) => {},
+            Err(e) => {
+                return Err(GlobalError::from(e));
+            }
+        }
         // 对依赖的引用计数做修改
-        software_guard.update_reference(dependency_list);
+        match software_guard.update_reference(dependency_list) {
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(GlobalError::from(e)) 
+        }
     }
     // 更新某指定依赖
     pub fn update_dependency(&self, archive : String, mode : ConfigurationUpdateMode) {

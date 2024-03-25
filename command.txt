@@ -1,0 +1,4 @@
+mysql -u root -p
+show databases;
+use backend;
+drop table softwares;

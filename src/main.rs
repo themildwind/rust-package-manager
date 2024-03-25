@@ -3,7 +3,9 @@ use toml::to_string_pretty;
 use crate::dep_manager::{Dependency, DependencyList};
 use crate::run_profile::profile_handler;
 use crate::scheduler_module::scheduler;
+use crate::software_manager::download_unit;
 use crate::version_mod::Version;
+use crate::test_backend::TestBackend;
 // 大致流程，每个应用程序有个按照规约的配置文件，读取文件，检查依赖，下载未拥有的依赖，
 // 然后把地址给程序，用户选择依赖升级，保存版本链，并支持回退。
 // 最后，删除不再使用的软件包。
@@ -14,61 +16,32 @@ mod software_manager;
 mod scheduler_module;
 mod system_error;
 mod global_error;
+mod test_backend;
 use reqwest;
 
-fn main() {
-    // 开启日志
-    SimpleLogger::new().init().unwrap();
-    // 成功
-    let result1 = scheduler().analyse_download_install("success_template.txt".to_string());
-    println!("{:?}", result1);
-    // 成功
-    let result2 = scheduler().analyse_download_install("failed_template.txt".to_string());
-    println!("{:?}", result2);
-    // 
-    scheduler().garbage_collection();
-    log::info!("god bless me");
-}
 // fn main() {
-//     // 创建一个 DependencyList 实例
-//     let dependency_list = Dependency_List {
-//         dependencies: vec![
-//             Dependency {
-//                 archive: "jammy-updates".to_string(),
-//                 component: "main".to_string(),
-//                 origin: "Ubuntu".to_string(),
-//                 label: "Ubuntu".to_string(),
-//                 architecture: "amd64".to_string(),
-//                 download: "https://example.com/ubuntu-22.04.1-live-server-amd64.iso".to_string(),
-//                 others: "其他".to_string(),
-//                 version: Version { version: "22.04".to_string() },
-//             },
-//             // 添加更多的 Dependency 对象
-//         ],
-//     };
-
-//     // 将 DependencyList 实例序列化为 TOML 格式的字符串
-//     let toml_string = to_string_pretty(&dependency_list).unwrap();
-
-//     // 打印生成的 TOML 字符串
-//     println!("{}", toml_string);
+//     // // 开启日志
+//     // SimpleLogger::new().init().unwrap();
+//     // // 成功案例
+//     // let result1 = scheduler().analyse_download_install("success_template.txt".to_string());
+//     // println!("{:?}", result1);
+//     // // 失败案例
+//     // let result2 = scheduler().analyse_download_install("failed_template.txt".to_string());
+//     // println!("{:?}", result2);
+//     // // 
+//     // scheduler().garbage_collection();
+//     let result = download_unit().download_sync("http://127.0.0.1:8080".to_string());
+//     println!("{:?}", result);
+//     log::info!("god bless me");
 // }
+use reqwest::Error;
 
-// #[tokio::main]
-// async fn main() -> Result<(), reqwest::Error> {
-//     // 发起 GET 请求
-//     let response = reqwest::get("https://www.baidu.com")
-//         .await?;
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let archive = "example_archive".to_string();
+    let version = "1.0".to_string();
+    test_backend::TestBackend::test_get_file_url_by_archive_version(&archive, &version);
+    Ok(())
+}
 
-//     // 检查是否成功
-//     if response.status().is_success() {
-//         // 将响应文本打印到控制台
-//         let body = response.text().await?;
-//         println!("Response body:\n{}", body);
-//     } else {
-//         println!("Request failed with status: {:?}", response.status());
-//     }
-
-//     Ok(())
-// }
 

@@ -548,7 +548,7 @@ dependencies = [
 [[package]]
 name = "num-traits"
 version = "0.2.15"
-source = "git+https://git.mirrors.dragonos.org/DragonOS-Community/num-traits.git?rev=1597c1c#1597c1c4d1b3e33548e4661c519b7246a5fc1c28"
+source = "git+https://git.mirrors.dragonos.org.cn/DragonOS-Community/num-traits.git?rev=1597c1c#1597c1c4d1b3e33548e4661c519b7246a5fc1c28"
 dependencies = [
  "autocfg",
 ]
@@ -822,6 +822,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "semver"
+version = "1.0.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
+
+[[package]]
 name = "serde"
 version = "1.0.193"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1023,8 +1029,10 @@ dependencies = [
  "num-derive",
  "num-traits 0.2.15",
  "reqwest",
+ "semver",
  "serde",
  "serde_derive",
+ "serde_json",
  "simple_logger",
  "tokio",
  "toml",

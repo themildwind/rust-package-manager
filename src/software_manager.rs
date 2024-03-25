@@ -102,6 +102,7 @@ impl SoftwareManager {
         return &self.hashmap;
     }
     // 删除所有引用数为0的依赖包
+    // todo : 目前是删除所有计数为0的，但是考虑删除后减少它的依赖包的计数，考虑迭代删除
     pub fn garbage_collection(&mut self) -> Result<(), SoftwareManagerError> {
         let mut result = Ok(());
         // 检查引用是否为0 ，为0则删除文件，再从数组移除
@@ -115,11 +116,12 @@ impl SoftwareManager {
             }
             let guard = inner_guard.unwrap();
             if guard.reference_count() == 0 {
-                // todo 删除文件
+                // todo 删除文件，并且它所依赖的文件的的计数要减少
                 // if {
                 //     result = Err(SoftwareManagerError::RemoveDependencyError("".to_string()));
                 //     break;
                 // }
+                // todo 一个文件被删除，它所依赖的文件可能成为垃圾，需要被回收
                 indexes_to_remove.push(index);
             }
         }
@@ -300,16 +302,17 @@ impl DownloadUnit {
         return Ok(Software::new(path, dependency));
     }
     // 同步
-    fn download_sync() -> Result<(), reqwest::Error> {
-        let body = reqwest::blocking::get("https://www.rust-lang.org")?.text()?;
+    pub fn download_sync(&self, target_url : String) -> Result<(String), reqwest::Error> {
+        let body = reqwest::blocking::get(target_url)?.text()?;
         //println!("body = {:?}", body);
-        Ok(())
+        Ok(body)
     }
     // 异步
     // async fn download_async (){
     //     let body = reqwest::get("https://www.rust-lang.org").await?.text().await?;
     //     println!("body = {:?}", body);
     // }
+    
     pub fn new() -> DownloadUnit {
         return DownloadUnit {};
     }
