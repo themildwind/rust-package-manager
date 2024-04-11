@@ -5,7 +5,6 @@ use crate::run_profile::profile_handler;
 use crate::scheduler_module::scheduler;
 use crate::software_manager::download_unit;
 use crate::version_mod::Version;
-use crate::test_backend::TestBackend;
 // 大致流程，每个应用程序有个按照规约的配置文件，读取文件，检查依赖，下载未拥有的依赖，
 // 然后把地址给程序，用户选择依赖升级，保存版本链，并支持回退。
 // 最后，删除不再使用的软件包。
@@ -40,7 +39,7 @@ use reqwest::Error;
 async fn main() -> Result<(), Error> {
     let archive = "example_archive".to_string();
     let version = "1.0".to_string();
-    test_backend::TestBackend::test_get_file_url_by_archive_version(&archive, &version);
+    //test_backend::TestBackend::test_get_file_url_by_archive_version(&archive, &version);
     Ok(())
 }
 

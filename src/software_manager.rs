@@ -1,14 +1,14 @@
 use crate::{dep_manager::{Dependency, DependencyList}, run_profile::profile_handler};
+use base64::decode;
 use lazy_static::lazy_static;
 use serde::de;
+use reqwest::Error;
 use simple_logger::SimpleLogger;
+use tokio::runtime::Runtime;
 use std::{
-    collections::{HashMap, HashSet, LinkedList},
-    ptr::null,
-    result,
-    sync::{Arc, Mutex, MutexGuard},
+    collections::{HashMap, HashSet, LinkedList}, fs::File, io::Write, ptr::null, result, sync::{Arc, Mutex, MutexGuard}
 };
-
+use serde_json::{Value, json};
 // 安装的软件包
 #[derive(Debug)]
 pub struct Software {
@@ -75,7 +75,7 @@ pub enum SoftwareManagerError {
     DependencyAlreadyInstalled(Arc<Dependency>),
     DependencyNotInstalled(Arc<Dependency>),
     // 下载时遇到错误
-    DownloadvError(String),
+    DownloadError(String),
     // 安装时遇到错误
     InstallDependencyError(String),
     // 解析依赖时遇到错误
@@ -280,9 +280,6 @@ impl SoftwareManager {
 }
 
 //
-const DOWNLOAD_SITE: &str = "www.";
-
-//
 lazy_static! {
     static ref DOWNLOAD_UNIT: Arc<DownloadUnit> = Arc::new(DownloadUnit::new());
 }
@@ -295,17 +292,52 @@ pub fn download_unit() -> &'static Arc<DownloadUnit> {
 pub struct DownloadUnit {}
 impl DownloadUnit {
     pub fn download(&self, dependency: Arc<Dependency>) -> Result<Arc<Software>, SoftwareManagerError> {
-        // 找到下载地址
-        let downloadsite = dependency.download();
-        // todo 下载到本地
-        let path = "  ".to_string();
-        return Ok(Software::new(path, dependency));
+        // 创建一个新的 tokio 运行时环境
+        let rt = Runtime::new().unwrap();    
+        // 在异步上下文中执行异步函数并等待结果返回
+        let result = rt.block_on(async {
+            self.download_sync(dependency).await
+        });
+        return result;
     }
     // 同步
-    pub fn download_sync(&self, target_url : String) -> Result<(String), reqwest::Error> {
-        let body = reqwest::blocking::get(target_url)?.text()?;
-        //println!("body = {:?}", body);
-        Ok(body)
+    pub async fn download_sync(&self, dependency: Arc<Dependency>) -> Result<Arc<Software>, SoftwareManagerError> {
+        // 找到下载地址
+        let downloadsite = dependency.download();
+        // todo 下载到本地，本地路径暂不确定
+        let path = "  ".to_string();
+        //
+        let client = reqwest::Client::new();
+        let response ;
+        match  client.get(downloadsite).send().await{
+            Ok(r) => response = r,
+            Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
+        };
+        let file : Value = match response.text().await {
+            Ok(f) => serde_json::from_str(&f).unwrap(),
+            Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
+        };
+        // 根据返回结果操作
+        if file.get("status_code").is_some() {
+            return Err(SoftwareManagerError::DownloadError(file.get("message").unwrap().to_string()));
+        }
+        if file.get("data").is_none() {
+            return Err(SoftwareManagerError::DownloadError("data is none".to_string()));
+        }
+        // 获得返回结果，如果没有问题就安装到本地
+        let data  = file.get("data").unwrap().as_str().unwrap();
+        let decoded_data: Vec<u8> = match decode(data) {
+            Ok(decoded) => decoded,
+            Err(_) => {
+                return Err(SoftwareManagerError::DownloadError("Failed to decode Base64 string.".to_string()));
+            }
+        };
+        match install_unit().install(decoded_data) {
+            Ok(o) => {},
+            // todo 错误类型定义
+            Err(err) => return Err(err),
+        } 
+        return Ok(Software::new(path, dependency));
     }
     // 异步
     // async fn download_async (){
@@ -315,5 +347,30 @@ impl DownloadUnit {
     
     pub fn new() -> DownloadUnit {
         return DownloadUnit {};
+    }
+}
+
+lazy_static! {
+    static ref INSTALL_UNIT: Arc<InstallUnit> = Arc::new(InstallUnit::new());
+}
+//
+#[inline(always)]
+#[allow(dead_code)]
+pub fn install_unit() -> &'static Arc<InstallUnit> {
+    &INSTALL_UNIT
+}
+// 安装模块
+pub struct InstallUnit {}
+impl InstallUnit {
+    
+    pub fn new() -> InstallUnit {
+        return InstallUnit {};
+    }
+    pub fn install(&self, decoded_data : Vec<u8>) -> Result<(), Error>{
+        let compressed_data: Vec<u8> = decoded_data;
+        // 将数据写入文件
+        let mut file = File::create("output.tar")?;
+        file.write_all(&compressed_data)?;
+        return Ok(());
     }
 }

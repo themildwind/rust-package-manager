@@ -12,7 +12,7 @@ pub enum GlobalError {
     // 依赖包未下载
     DependencyNotInstalled(Arc<Dependency>),
     // 下载时遇到错误
-    DownloadvError(String),
+    DownloadError(String),
     // 安装时遇到错误
     InstallDependencyError(String),
     // 解析依赖时遇到错误
@@ -39,7 +39,7 @@ impl From<SoftwareManagerError> for GlobalError {
             SoftwareManagerError::DependencyNotFound(d) => GlobalError::DependencyNotFound(d),
             SoftwareManagerError::DependencyAlreadyInstalled(d) => GlobalError::DependencyAlreadyInstalled(d),
             SoftwareManagerError::DependencyNotInstalled(d) => GlobalError::DependencyNotFound(d),
-            SoftwareManagerError::DownloadvError(d) => GlobalError::DownloadvError(d),
+            SoftwareManagerError::DownloadError(d) => GlobalError::DownloadError(d),
             SoftwareManagerError::InstallDependencyError(d) => GlobalError::InstallDependencyError(d),
             SoftwareManagerError::ParseDependencyError(d) => GlobalError::ParseDependencyError(d),
             SoftwareManagerError::RemoveDependencyError(s) => GlobalError::RemoveDependencyError(s),
