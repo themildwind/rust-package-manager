@@ -1,7 +1,7 @@
 use std::{sync::Arc};
 
 use lazy_static::lazy_static;
-use crate::{run_profile::profile_handler, software_manager::software_manager, dep_manager::{configuration_manager, Configuration, ConfigurationUpdateMode, DependencyList}, global_error::GlobalError};
+use crate::{run_profile::profile_handler, software_manager::software_manager, dep_manager::{configuration_manager, Configuration, ConfigurationUpdateMode, DependencyItemList}, global_error::GlobalError};
 
 // 调度器作为单例
 lazy_static! {
@@ -12,35 +12,36 @@ lazy_static! {
 pub(super) fn scheduler() -> &'static Scheduler {
     &SCHEDULER
 }
+// 调度器负责完成任务的调度，操控多个组件一起完成任务
 pub struct  Scheduler{
-
 }
 impl Scheduler {
     fn new ()-> Scheduler{
         return Scheduler {  };
     }
-    // 调度器负责完成任务的调度，操控多个组件一起完成任务
-    // todo 接受命令，解析某配置文件并下载依赖
+    // 解析下载安装
+    // 使用场景： 1、 系统第一次启动时解析配置文件下载安装必带的依赖
     pub fn analyse_download_install (&self, path : String) -> Result<(),GlobalError>{
         // 获取要下载的配置文件
-        let dependency_list = profile_handler().analyse(path.clone());
+        let dependency_list = match profile_handler().analyse_local_file(path.clone()) {
+            Ok(list) => list,
+            Err(e) => {
+                return Err(GlobalError::from(e));
+            }
+        };
         // 检查
         let mut software_guard = software_manager().lock().unwrap();
-        let download_list ;
-        match  software_guard.check(dependency_list.clone()){
-            Ok(list) => download_list = list,
+        let download_list = match software_guard.check(dependency_list.clone()){
+            Ok(list) => list,
             Err(e) => {
                 log::error!("bug");
                 // 存在环
                 return Err(GlobalError::from(e));
-            }
-            
-        }
-        println!(" download list : ");
+            }     
+        };
         for dep in download_list.iter(){
             print!(" {} ->",dep.archive);
         }
-        println!(" over ");
         // 下载
         let download_result = software_guard.install(download_list);
         match download_result {
@@ -66,7 +67,7 @@ impl Scheduler {
         }
     }
     // 
-    pub fn download_install (&self, dependency_list: DependencyList) -> Result<(),GlobalError>{
+    pub fn download_install (&self, dependency_list: DependencyItemList) -> Result<(),GlobalError>{
         // 检查
         let mut software_guard = software_manager().lock().unwrap();
         let download_list ;
@@ -93,22 +94,21 @@ impl Scheduler {
         }
     }
     // 更新某指定依赖
-    pub fn update_dependency(&self, archive : String, mode : ConfigurationUpdateMode) {
+    pub fn update_dependency(&self, archive : String, mode : ConfigurationUpdateMode) -> Result<(),GlobalError> {
         // 应用更新模式，让Manager进行更新，返回新的Configuration，然后对引用计数作修改
         let mut configuration_guard = configuration_manager().lock().unwrap();
-        let new_list;
-        match configuration_guard.update(archive, mode) {
-            Ok(l) => new_list = l,
+        let new_list = match configuration_guard.update(archive, mode) {
+            Ok(l) => l,
             Err(e) => {
-                log::error!("bug");
-                return;
+                return Err(GlobalError::from(e));
             }
-        }
+        };
         // 进行下载
         self.download_install(new_list);
+        // todo 
     }
     // 垃圾回收
-    pub fn garbage_collection(&self) {
+    pub fn garbage_collection(&self) -> Result<(),GlobalError>{
         // 调用软件管理器
         let mut guard = software_manager().lock().unwrap();
         let result = guard.garbage_collection();

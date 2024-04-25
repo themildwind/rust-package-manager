@@ -1,10 +1,12 @@
-use std::{collections::HashMap, fmt, ops::Deref, sync::{Arc, Mutex, MutexGuard}, hash::{Hash, Hasher}};
-use serde_derive::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt, hash::{Hash, Hasher}, ops::Deref, str::FromStr, sync::{Arc, Mutex, MutexGuard}};
 use lazy_static::lazy_static;
-use crate::{version_mod::Version, software_manager::Software};
+use semver::Version;
+use serde_derive::{Deserialize, Serialize};
+use crate::{software_manager::Software, version_wrapper::VersionWrapper};
+
 // 
 #[derive(Clone, Debug, Deserialize,Serialize,PartialEq, Eq,Hash)]
-pub struct Dependency
+pub struct DependencyItem
 {
     pub archive: String,
     pub component: String,
@@ -13,13 +15,13 @@ pub struct Dependency
     pub architecture: String,
     pub download : String,
     pub others: String,
-    pub version: Version,
+    pub version_wrapper: VersionWrapper,
 }
-impl Dependency{
-    fn new () -> Dependency{
-        return Dependency{
+impl DependencyItem{
+    fn new () -> DependencyItem{
+        return DependencyItem{
             archive: String::new(),
-            version: Version::new("0".to_string()),
+            version_wrapper: VersionWrapper::new(Version::new(0, 0, 0)),
             component: String::new(),
             origin: String::new(),
             label: String::new(),
@@ -37,13 +39,13 @@ impl Dependency{
 // 每个应用程序所有，会根据配置文件构建
 // 并且构建版本链
 #[derive(Clone, Debug, PartialEq, Eq,Hash)]
-pub struct DependencyList{
+pub struct DependencyItemList{
     // 一个数组，表示所有依赖的包
-    pub dependencies : Vec<Arc<Dependency>>,
+    pub dependencies : Vec<Arc<DependencyItem>>,
 }
-impl DependencyList{
-    pub fn new(vec : Vec<Dependency>) -> DependencyList{
-        return  DependencyList{
+impl DependencyItemList{
+    pub fn new(vec : Vec<DependencyItem>) -> DependencyItemList{
+        return  DependencyItemList{
             dependencies : vec
         .into_iter()
         .map(|dep| Arc::new(dep))
@@ -51,8 +53,8 @@ impl DependencyList{
         }
     }
     // 接受一个包含依赖的 Vec<Dependency> 创建新的配置
-    pub fn with_dependencies(vec: Vec<Arc<Dependency>>) -> DependencyList{
-        DependencyList{
+    pub fn with_dependencies(vec: Vec<Arc<DependencyItem>>) -> DependencyItemList{
+        DependencyItemList{
             dependencies: vec,
         }
     }
@@ -69,21 +71,21 @@ pub struct Configuration{
 #[derive(Debug, Clone,PartialEq, Eq,Hash)]
 pub struct InnerConfiguration {
     // 持有所有的版本
-    pub vec : Vec<DependencyList>,
+    pub vec : Vec<DependencyItemList>,
     pub age: usize,
 }
 impl InnerConfiguration{
     pub fn age(&self) -> usize {
         return self.age;
     }
-    pub fn vec(&self) -> Vec<DependencyList> {
+    pub fn vec(&self) -> Vec<DependencyItemList> {
         return self.vec.clone();
     }
     // 
     fn add(&mut self) {
         self.age += 1;
     }
-    pub fn update(&mut self, list: DependencyList) {
+    pub fn update(&mut self, list: DependencyItemList) {
         self.vec.push(list);
         self.add();
     }
@@ -106,8 +108,8 @@ impl Hash for Configuration {
 }
 impl  Configuration  {
     // 传入依赖列表
-    pub fn new(list : DependencyList, archive : String, age : usize) -> Arc<Configuration>{
-        let mut vec : Vec<DependencyList> = Vec::new();
+    pub fn new(list : DependencyItemList, archive : String, age : usize) -> Arc<Configuration>{
+        let mut vec : Vec<DependencyItemList> = Vec::new();
         vec.push(list);
         return Arc::new(Configuration{
             archive : archive,
@@ -147,7 +149,7 @@ pub enum VersionMode {
     // 最新版本
     Latest,
     // 指定版本
-    Specific(Version),
+    Specific(VersionWrapper),
 }
 // 用于表示更新的模式
 pub enum ConfigurationUpdateMode {
@@ -189,18 +191,17 @@ impl ConfigurationManager {
     }
 
     // 更新某个配置
-    pub fn update(&mut self, archive : String, mode : ConfigurationUpdateMode) -> Result<DependencyList,ConfigurationManagerError>{
+    pub fn update(&mut self, archive : String, mode : ConfigurationUpdateMode) -> Result<DependencyItemList,ConfigurationManagerError>{
         if !self.archive_hashmap.contains_key(&archive) {
             // 配置文件不存在
             return Err(ConfigurationManagerError::ConfigurationNotFound(archive.clone()));
         }
         let config = self.archive_hashmap.get(&archive).unwrap();
-        let list : DependencyList;
         // 传入引用，实例被修改，添加新的依赖列表
-        match configuration_update_unit().get_new_configuration(config.clone(), mode) {
-            Ok(l) => {list = l},
+        let list : DependencyItemList = match configuration_update_unit().get_new_configuration(config.clone(), mode) {
+            Ok(l) => l,
             Err(e) => return Err(e),
-        }
+        };
         return Ok(list);
     }
 }
@@ -221,14 +222,14 @@ impl ConfigurationUpdateUnit {
     pub fn new() -> ConfigurationUpdateUnit {
         ConfigurationUpdateUnit
     }
-    pub fn get_new_configuration(&self, configuration : Arc<Configuration>, mode : ConfigurationUpdateMode) -> Result<DependencyList,ConfigurationManagerError>{
+    pub fn get_new_configuration(&self, configuration : Arc<Configuration>, mode : ConfigurationUpdateMode) -> Result<DependencyItemList,ConfigurationManagerError>{
         let inner_guard = configuration.inner();
         if inner_guard.is_none() {
             return Err(ConfigurationManagerError::ConfigurationLockFailed);
         }
         let guard = inner_guard.unwrap();
         // todo 上网更新
-        let mut list = DependencyList::new(Vec::new());
+        let mut list = DependencyItemList::new(Vec::new());
         if let tmp = guard.vec().last().is_some() {
             list = guard.vec().last().unwrap().clone();
         }

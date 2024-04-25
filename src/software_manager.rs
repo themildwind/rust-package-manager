@@ -1,4 +1,4 @@
-use crate::{dep_manager::{Dependency, DependencyList}, run_profile::profile_handler};
+use crate::{dep_manager::{DependencyItem, DependencyItemList}, network_module::download_unit, run_profile::profile_handler};
 use base64::decode;
 use lazy_static::lazy_static;
 use serde::de;
@@ -24,14 +24,14 @@ pub struct InnerSoftware {
     // 引用计数。 包括new version和 last version
     reference_count: i32,
     //
-    dependency: Arc<Dependency>,
+    dependency: Arc<DependencyItem>,
 }
 
 impl InnerSoftware{
     pub fn reference_count(&self) -> i32 {
         return self.reference_count;
     }
-    pub fn dependency(&self) -> Arc<Dependency> {
+    pub fn dependency(&self) -> Arc<DependencyItem> {
         return self.dependency.clone();
     }
     // 对软件包的引用计数做修改
@@ -41,7 +41,7 @@ impl InnerSoftware{
 }
 
 impl Software {
-    pub fn new(path: String, dependency: Arc<Dependency>) -> Arc<Software> {
+    pub fn new(path: String, dependency: Arc<DependencyItem>) -> Arc<Software> {
         return Arc::new(Software {
             inner: Mutex::new(InnerSoftware {
                 ptr: path,
@@ -70,16 +70,18 @@ pub(super) fn software_manager() -> &'static Arc<Mutex<SoftwareManager>> {
 }
 
 pub enum SoftwareManagerError {
-    CircularDependency(LinkedList<Arc<Dependency>>),
-    DependencyNotFound(Arc<Dependency>),
-    DependencyAlreadyInstalled(Arc<Dependency>),
-    DependencyNotInstalled(Arc<Dependency>),
+    CircularDependency(LinkedList<Arc<DependencyItem>>),
+    DependencyNotFound(Arc<DependencyItem>),
+    DependencyAlreadyInstalled(Arc<DependencyItem>),
+    DependencyNotInstalled(Arc<DependencyItem>),
     // 下载时遇到错误
     DownloadError(String),
     // 安装时遇到错误
     InstallDependencyError(String),
     // 解析依赖时遇到错误
     ParseDependencyError(String),
+    // 读取本地文件错误
+    ReadLocalFileError(String),
     // 删除依赖时遇到错误
     RemoveDependencyError(String),
     // software加锁失败
@@ -89,7 +91,7 @@ pub enum SoftwareManagerError {
 // 垃圾回收，删除所有引用为0的软件包
 pub struct SoftwareManager {
     softwares: Vec<Arc<Software>>,
-    hashmap: HashMap<Arc<Dependency>, Arc<Software>>,
+    hashmap: HashMap<Arc<DependencyItem>, Arc<Software>>,
 }
 impl SoftwareManager {
     fn new() -> SoftwareManager {
@@ -98,7 +100,7 @@ impl SoftwareManager {
             hashmap: HashMap::new(),
         };
     }
-    fn hashmap(&self) -> &HashMap<Arc<Dependency>, Arc<Software>> {
+    fn hashmap(&self) -> &HashMap<Arc<DependencyItem>, Arc<Software>> {
         return &self.hashmap;
     }
     // 删除所有引用数为0的依赖包
@@ -138,7 +140,7 @@ impl SoftwareManager {
     pub fn insert(
         &mut self,
         software: Arc<Software>,
-        dependency: Arc<Dependency>,
+        dependency: Arc<DependencyItem>,
     ) -> Result<(), SoftwareManagerError> {
         if !self.hashmap.contains_key(&dependency) {
             self.softwares.push(software.clone());
@@ -151,17 +153,17 @@ impl SoftwareManager {
     // 检查dependency_list是否存在环
     pub fn check(
         &self,
-        dependency_list: DependencyList,
-    ) -> Result<LinkedList<Arc<Dependency>>, SoftwareManagerError> {
+        dependency_list: DependencyItemList,
+    ) -> Result<LinkedList<Arc<DependencyItem>>, SoftwareManagerError> {
         // 用于判断是否已经下载或遍历时已经加入下载队列
-        let mut hashmap: HashMap<Arc<Dependency>, bool> = HashMap::new();
+        let mut hashmap: HashMap<Arc<DependencyItem>, bool> = HashMap::new();
         for key in self.hashmap.keys() {
             hashmap.insert(key.clone(), true);
         }
         // 用于记录下载队列，按顺序，无需其它依赖的排前面
-        let mut download_list: LinkedList<Arc<Dependency>> = LinkedList::new();
-        let mut hashset: HashSet<Arc<Dependency>> = HashSet::new();
-        let mut linkedlist: LinkedList<Arc<Dependency>> = LinkedList::new();
+        let mut download_list: LinkedList<Arc<DependencyItem>> = LinkedList::new();
+        let mut hashset: HashSet<Arc<DependencyItem>> = HashSet::new();
+        let mut linkedlist: LinkedList<Arc<DependencyItem>> = LinkedList::new();
         for dependency in dependency_list.dependencies {
             // 检测出环形
             match Self::dfs(
@@ -185,11 +187,11 @@ impl SoftwareManager {
     // 深度优先搜索查找环
     fn dfs(
         &self,
-        dependency: Arc<Dependency>,
-        hashset: &mut HashSet<Arc<Dependency>>,
-        linkedlist: &mut LinkedList<Arc<Dependency>>,
-        hashmap: &mut HashMap<Arc<Dependency>, bool>,
-        download_list: &mut LinkedList<Arc<Dependency>>,
+        dependency: Arc<DependencyItem>,
+        hashset: &mut HashSet<Arc<DependencyItem>>,
+        linkedlist: &mut LinkedList<Arc<DependencyItem>>,
+        hashmap: &mut HashMap<Arc<DependencyItem>, bool>,
+        download_list: &mut LinkedList<Arc<DependencyItem>>,
     ) -> Result<bool, SoftwareManagerError> {
         //
         if hashmap.contains_key(&dependency) {
@@ -208,12 +210,12 @@ impl SoftwareManager {
             return Ok(false);
         }
         linkedlist.push_back(dependency.clone());
-        // todo 根据dep获得dep的依赖
-        let config: DependencyList;
-        match Self::get_dep(dependency.clone()) {
-            Ok(dependency_list) => config = dependency_list,
+        // 根据dep获得dep的依赖
+        let config = match Self::get_dep(dependency.clone()) {
+            Ok(dependency_list) => dependency_list,
             Err(err) => return Err(err),
-        }
+        };
+        
         for dependency in config.dependencies {
             match self.dfs(dependency, hashset, linkedlist, hashmap, download_list) {
                 Ok(b) => match b {
@@ -233,11 +235,11 @@ impl SoftwareManager {
     // 根据下载队列来安装
     pub fn install(
         &mut self,
-        download_list: LinkedList<Arc<Dependency>>,
+        download_list: LinkedList<Arc<DependencyItem>>,
     ) -> Result<(), SoftwareManagerError> {
         // 将下载依赖交给下载器依次下载
         for dependency in download_list.iter() {
-            let result = download_unit().download(dependency.clone());
+            let result = download_unit().download_software(dependency.clone());
             let software;
             match result {
                 Ok(s) => software = s,
@@ -250,7 +252,7 @@ impl SoftwareManager {
         return Ok(());
     }
     // 更新引用计数
-    pub fn update_reference(&mut self, list: DependencyList) -> Result<(), SoftwareManagerError>{
+    pub fn update_reference(&mut self, list: DependencyItemList) -> Result<(), SoftwareManagerError>{
         for dependency in list.dependencies {
             if self.hashmap().contains_key(&dependency){
                 let software = self.hashmap().get(&dependency).unwrap();
@@ -270,107 +272,11 @@ impl SoftwareManager {
         }
         return Ok(());
     }
-    // todo 查找依赖包的依赖
-    pub fn get_dep(dep: Arc<Dependency>) -> Result<DependencyList, SoftwareManagerError> {
-        // 本地测试
-        let list = profile_handler().analyse("software-package/".to_string() + &dep.archive.clone() +"-" + &dep.version.version() + ".txt");
-        //
-        return Ok(list);
+    // 查找依赖包的依赖
+    pub fn get_dep(dep: Arc<DependencyItem>) -> Result<DependencyItemList, SoftwareManagerError> {
+        // 通过网络获取该文件的配置文件
+        return download_unit().get_dependency_list(dep.clone());
     }
 }
 
-//
-lazy_static! {
-    static ref DOWNLOAD_UNIT: Arc<DownloadUnit> = Arc::new(DownloadUnit::new());
-}
-//
-#[inline(always)]
-#[allow(dead_code)]
-pub fn download_unit() -> &'static Arc<DownloadUnit> {
-    &DOWNLOAD_UNIT
-}
-pub struct DownloadUnit {}
-impl DownloadUnit {
-    pub fn download(&self, dependency: Arc<Dependency>) -> Result<Arc<Software>, SoftwareManagerError> {
-        // 创建一个新的 tokio 运行时环境
-        let rt = Runtime::new().unwrap();    
-        // 在异步上下文中执行异步函数并等待结果返回
-        let result = rt.block_on(async {
-            self.download_sync(dependency).await
-        });
-        return result;
-    }
-    // 同步
-    pub async fn download_sync(&self, dependency: Arc<Dependency>) -> Result<Arc<Software>, SoftwareManagerError> {
-        // 找到下载地址
-        let downloadsite = dependency.download();
-        // todo 下载到本地，本地路径暂不确定
-        let path = "  ".to_string();
-        //
-        let client = reqwest::Client::new();
-        let response ;
-        match  client.get(downloadsite).send().await{
-            Ok(r) => response = r,
-            Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
-        };
-        let file : Value = match response.text().await {
-            Ok(f) => serde_json::from_str(&f).unwrap(),
-            Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
-        };
-        // 根据返回结果操作
-        if file.get("status_code").is_some() {
-            return Err(SoftwareManagerError::DownloadError(file.get("message").unwrap().to_string()));
-        }
-        if file.get("data").is_none() {
-            return Err(SoftwareManagerError::DownloadError("data is none".to_string()));
-        }
-        // 获得返回结果，如果没有问题就安装到本地
-        let data  = file.get("data").unwrap().as_str().unwrap();
-        let decoded_data: Vec<u8> = match decode(data) {
-            Ok(decoded) => decoded,
-            Err(_) => {
-                return Err(SoftwareManagerError::DownloadError("Failed to decode Base64 string.".to_string()));
-            }
-        };
-        match install_unit().install(decoded_data) {
-            Ok(o) => {},
-            // todo 错误类型定义
-            Err(err) => return Err(err),
-        } 
-        return Ok(Software::new(path, dependency));
-    }
-    // 异步
-    // async fn download_async (){
-    //     let body = reqwest::get("https://www.rust-lang.org").await?.text().await?;
-    //     println!("body = {:?}", body);
-    // }
-    
-    pub fn new() -> DownloadUnit {
-        return DownloadUnit {};
-    }
-}
 
-lazy_static! {
-    static ref INSTALL_UNIT: Arc<InstallUnit> = Arc::new(InstallUnit::new());
-}
-//
-#[inline(always)]
-#[allow(dead_code)]
-pub fn install_unit() -> &'static Arc<InstallUnit> {
-    &INSTALL_UNIT
-}
-// 安装模块
-pub struct InstallUnit {}
-impl InstallUnit {
-    
-    pub fn new() -> InstallUnit {
-        return InstallUnit {};
-    }
-    pub fn install(&self, decoded_data : Vec<u8>) -> Result<(), Error>{
-        let compressed_data: Vec<u8> = decoded_data;
-        // 将数据写入文件
-        let mut file = File::create("output.tar")?;
-        file.write_all(&compressed_data)?;
-        return Ok(());
-    }
-}

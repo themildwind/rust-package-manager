@@ -1,22 +1,24 @@
 use std::{collections::LinkedList, sync::Arc};
 
-use crate::{dep_manager::{Dependency, ConfigurationManagerError}, software_manager::SoftwareManagerError};
+use crate::{dep_manager::{DependencyItem, ConfigurationManagerError}, software_manager::SoftwareManagerError};
 #[derive(Debug)]
 pub enum GlobalError {
     // 循环依赖
-    CircularDependency(LinkedList<Arc<Dependency>>),
+    CircularDependency(LinkedList<Arc<DependencyItem>>),
     // 依赖不存在
-    DependencyNotFound(Arc<Dependency>),
+    DependencyNotFound(Arc<DependencyItem>),
     // 依赖包已经下载
-    DependencyAlreadyInstalled(Arc<Dependency>),
+    DependencyAlreadyInstalled(Arc<DependencyItem>),
     // 依赖包未下载
-    DependencyNotInstalled(Arc<Dependency>),
+    DependencyNotInstalled(Arc<DependencyItem>),
     // 下载时遇到错误
     DownloadError(String),
     // 安装时遇到错误
     InstallDependencyError(String),
     // 解析依赖时遇到错误
     ParseDependencyError(String),
+    // 读取本地文件失败
+    ReadLocalFileError(String),
     // 删除依赖时遇到错误
     RemoveDependencyError(String),
     // software加锁失败
@@ -31,6 +33,7 @@ pub enum GlobalError {
     // 加锁失败
     ConfigurationLockFailed,
     //****************************************************/
+    
 }
 impl From<SoftwareManagerError> for GlobalError {
     fn from(error: SoftwareManagerError) -> Self {
@@ -44,6 +47,7 @@ impl From<SoftwareManagerError> for GlobalError {
             SoftwareManagerError::ParseDependencyError(d) => GlobalError::ParseDependencyError(d),
             SoftwareManagerError::RemoveDependencyError(s) => GlobalError::RemoveDependencyError(s),
             SoftwareManagerError::SoftwareLockError(s) => GlobalError::SoftwareLockError(s),
+            SoftwareManagerError::ReadLocalFileError(s) => GlobalError::ReadLocalFileError(s),
             
         }
     }
