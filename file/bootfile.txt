@@ -1,0 +1,6 @@
+# 使用toml格式
+[bootstrap_configuration]
+# 依赖
+depends = ["kernel-1.0.1", "init-1.0.1"]
+# 推荐
+recommends = ["suggest-1.0.1"]

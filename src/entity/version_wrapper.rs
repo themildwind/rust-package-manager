@@ -11,7 +11,9 @@ impl VersionWrapper {
     pub fn new (v : Version) -> VersionWrapper {
         VersionWrapper { version: v }
     }
-    
+    pub fn to_string(&self) -> String {
+        self.version.to_string()
+    }
 }
 // 
 impl Serialize for VersionWrapper {

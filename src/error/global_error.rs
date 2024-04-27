@@ -1,16 +1,19 @@
 use std::{collections::LinkedList, sync::Arc};
 
-use crate::{dep_manager::{DependencyItem, ConfigurationManagerError}, software_manager::SoftwareManagerError};
+use crate::entity::dependency::Package;
+use crate::manager::package_manager::PackageManagerError;
+use crate::manager::software_manager::SoftwareManagerError;
+
 #[derive(Debug)]
 pub enum GlobalError {
     // 循环依赖
-    CircularDependency(LinkedList<Arc<DependencyItem>>),
+    CircularDependency(LinkedList<Arc<Package>>),
     // 依赖不存在
-    DependencyNotFound(Arc<DependencyItem>),
+    DependencyNotFound(Arc<Package>),
     // 依赖包已经下载
-    DependencyAlreadyInstalled(Arc<DependencyItem>),
+    DependencyAlreadyInstalled(Arc<Package>),
     // 依赖包未下载
-    DependencyNotInstalled(Arc<DependencyItem>),
+    DependencyNotInstalled(Arc<Package>),
     // 下载时遇到错误
     DownloadError(String),
     // 安装时遇到错误
@@ -52,13 +55,13 @@ impl From<SoftwareManagerError> for GlobalError {
         }
     }
 }
-impl From<ConfigurationManagerError> for GlobalError {
-    fn from(error: ConfigurationManagerError) -> Self {
+impl From<PackageManagerError> for GlobalError {
+    fn from(error: PackageManagerError) -> Self {
         match error {
-            ConfigurationManagerError::ConfigurationLockFailed => GlobalError::ConfigurationLockFailed,
-            ConfigurationManagerError::ConfigurationNotFound(s) => GlobalError::ConfigurationNotFound(s),
-            ConfigurationManagerError::ConfigurationUpdateFailed => GlobalError::ConfigurationUpdateFailed,
-            ConfigurationManagerError::DuplicateConfiguration => GlobalError::DuplicateConfiguration,
+            PackageManagerError::ConfigurationLockFailed => GlobalError::ConfigurationLockFailed,
+            PackageManagerError::ConfigurationNotFound(s) => GlobalError::ConfigurationNotFound(s),
+            PackageManagerError::ConfigurationUpdateFailed => GlobalError::ConfigurationUpdateFailed,
+            PackageManagerError::DuplicateConfiguration => GlobalError::DuplicateConfiguration,
         }
     }
 }

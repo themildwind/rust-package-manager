@@ -1,8 +1,11 @@
 use std::{sync::Arc};
-
 use lazy_static::lazy_static;
-use crate::{run_profile::profile_handler, software_manager::software_manager, dep_manager::{configuration_manager, Configuration, ConfigurationUpdateMode, DependencyItemList}, global_error::GlobalError};
-
+use crate::entity::dependency::{Configuration, Package, PackageList};
+use crate::entity::software::{Software};
+use crate::entity::version_wrapper::VersionWrapper;
+use crate::error::global_error::GlobalError;
+use crate::tool::run_profile::{self, profile_handler};
+use crate::manager::software_manager::{self, SoftwareManagerError};
 // 调度器作为单例
 lazy_static! {
     static ref SCHEDULER : Scheduler = Scheduler::new();
@@ -67,7 +70,7 @@ impl Scheduler {
         }
     }
     // 
-    pub fn download_install (&self, dependency_list: DependencyItemList) -> Result<(),GlobalError>{
+    pub fn download_install (&self, dependency_list: PackageList) -> Result<(),GlobalError>{
         // 检查
         let mut software_guard = software_manager().lock().unwrap();
         let download_list ;
@@ -106,6 +109,7 @@ impl Scheduler {
         // 进行下载
         self.download_install(new_list);
         // todo 
+        return Ok(());
     }
     // 垃圾回收
     pub fn garbage_collection(&self) -> Result<(),GlobalError>{
@@ -113,5 +117,18 @@ impl Scheduler {
         let mut guard = software_manager().lock().unwrap();
         let result = guard.garbage_collection();
         // todo 向上输出全局类型的错误
+        return Ok(());
+    }
+    pub fn bootstrap(&self) -> Result<(),GlobalError>{
+        let path = "file/bootfile.txt".to_string();
+        // 解析引导文件，获取必要安装软件
+        let boot_config = match profile_handler().analyse_bootstrap_file(path) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(GlobalError::from(e));
+            }
+        }; 
+        // todo 调用上层管理器，由上层管理器获取更详细信息，然后调用底层管理器安装
+        return Ok(());
     }
 }
