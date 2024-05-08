@@ -26,6 +26,10 @@ impl Dependency {
         return format!("{}-{}", self.archive, self.version_wrapper.to_string());
     }
 }
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct DependencyListTemp{
+    pub dependencies : Vec<String>
+}
 #[derive(Clone, Debug, Deserialize,Serialize,PartialEq, Eq,Hash)]
 pub struct BootstrapConfigurationTemp {
     depends : Vec<String>,

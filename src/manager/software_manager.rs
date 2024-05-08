@@ -46,6 +46,7 @@ impl SoftwareManager {
             }
         };
         let mut map : HashMap<String, Arc<Software>> = HashMap::new();
+        log::debug!("SoftwareManager Start");
         for software in softwares.iter() {
             let str = format!("{}-{}", software.archive, software.version.to_string());
             map.insert(str, software.clone());

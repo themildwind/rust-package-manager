@@ -1,5 +1,6 @@
 mysql -u root -p
 show databases;
 use backend;
+show tables;
 drop table seaql_migrations;
 drop table softwares;

@@ -88,11 +88,17 @@ impl DownloadUnit {
             Ok(r) => r,
             Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
         };
-        let file  = match response.text().await {
-            Ok(f) => f,
+        let file : Value  = match response.text().await {
+            Ok(f) => serde_json::from_str(&f).unwrap(),
             Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
         };
-        return profile_handler().from_string_to_dependencies(file);
+        let deps = match file.get("data") {
+            Some(d) => d.as_str().unwrap(),
+            None => {
+                return Err(SoftwareManagerError::DownloadError("Failed to get data".to_string()));
+            }
+        };
+        return profile_handler().from_string_to_dependencies(deps.to_string());
     }
     // 获取软件包详细信息
     pub fn get_package_information(&self, dependency: Arc<Dependency>) -> Result<Arc<Package>, PackageManagerError> {

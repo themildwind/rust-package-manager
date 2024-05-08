@@ -23,9 +23,18 @@ fn main() {
     //get_software_toml();
     //test_toml();
     log::info!("god bless me");
-    //software_manager();
+    let version = VersionWrapper::new(Version::new(1, 0, 1));
+    let mut dependencies = Vec::new();
+    dependencies.push(Arc::new(Dependency::new("testA".to_string(), version.clone())));
+    match software_manager().lock().unwrap().install_package(dependencies) {
+        Ok(_) => {},
+        Err(e) => {
+            log::error!("{}", e.to_string());
+            return;
+        }
+    };
     //get_package_toml();
-    package_manager();
+    
 }
 
 fn test_toml() {

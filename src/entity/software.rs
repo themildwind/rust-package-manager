@@ -100,25 +100,28 @@ pub struct SoftwareListTemp {
 impl SoftwareListTemp {
     pub fn to_softwares(&self) -> Result<Vec<Arc<Software>>, SoftwareManagerError> {
         let mut softwares : Vec<Arc<Software>> = Vec::new();
-        // todo !!
-        // for tmp in self.software_temp.iter() {
-        //     let mut depends : Vec<Dependency> = Vec::new();
-        //     for dep_str in tmp.dependencies.iter() {
-        //     let parts : Vec<&str> = dep_str.split('-').collect();
-        //         if parts.len() < 2 {
-        //             return Err(SoftwareManagerError::ParseDependencyError(dep_str.to_string()));
-        //         }
-        //         match Version::from_str(parts[1]) {
-        //             Ok(version) => {
-        //                 depends.push(Dependency::new(parts[0].to_string(), VersionWrapper::new(version)))
-        //             },
-        //             Err(e) => {
-        //                 return Err(SoftwareManagerError::ParseDependencyError(e.to_string()));
-        //             }
-        //         }
-        //     }
-        //     softwares.push(Software::new(tmp.archive, tmp.version, depends, tmp.reference_count, tmp.status))
-        // }
+        for tmp in self.software_temp.iter() {
+            let mut depends : Vec<Dependency> = Vec::new();
+            let archive = tmp.archive.clone();
+            let version = tmp.version.clone();
+            let count = tmp.reference_count.clone();
+            let status = tmp.status.clone();
+            for dep_str in tmp.dependencies.iter() {
+            let parts : Vec<&str> = dep_str.split('-').collect();
+                if parts.len() < 2 {
+                    return Err(SoftwareManagerError::ParseDependencyError(dep_str.to_string()));
+                }
+                match Version::from_str(parts[1]) {
+                    Ok(version) => {
+                        depends.push(Dependency::new(parts[0].to_string(), VersionWrapper::new(version)))
+                    },
+                    Err(e) => {
+                        return Err(SoftwareManagerError::ParseDependencyError(e.to_string()));
+                    }
+                }
+            }
+            softwares.push(Software::new(archive, version, depends, count, status))
+        }
         return Ok(softwares);
     }
 }

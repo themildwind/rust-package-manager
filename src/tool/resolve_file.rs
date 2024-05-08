@@ -3,7 +3,7 @@ use std::{fs, sync::Arc};
 use semver::Version;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::entity::dependency::{self, BootstrapConfiguration, BootstrapConfigurationTemp, Dependency, Package, PackageList, PackageListTemp};
+use crate::entity::dependency::{self, BootstrapConfiguration, BootstrapConfigurationTemp, Dependency, DependencyListTemp, Package, PackageList, PackageListTemp};
 use crate::entity::software::{self, Software, SoftwareListTemp};
 use crate::entity::version_wrapper::VersionWrapper;
 use crate::error::software_error::SoftwareManagerError;
@@ -16,10 +16,7 @@ extern crate toml;
 pub fn profile_handler() -> &'static ProfileHandler {
     &ProfileHandler
 }
-#[derive(Deserialize, Serialize, Debug, Clone)]
-struct DependencyListTemp{
-    dependencies : Vec<String>
-}
+
 // 作为一个工具类，用来处理配置文件
 #[derive(Clone, Debug)]
 pub struct ProfileHandler;
@@ -31,7 +28,6 @@ impl ProfileHandler{
     pub fn get_local_file (&self, path : String) -> Result<String, SoftwareManagerError>{
         match fs::read_to_string(path) {
             Ok(c) => {
-                println!("{}", c);
                 return Ok(c)},
             Err(e) => return Err(SoftwareManagerError::ReadLocalOtherFileError(e.to_string())),
         };
@@ -41,6 +37,7 @@ impl ProfileHandler{
         if content.is_empty() {
             return Ok(Vec::new());
         }
+        println!("{}", content);
         // 解析 TOML 格式数据
         let vec : DependencyListTemp = match toml::from_str(&content) {
             Ok(d) => d ,
@@ -78,6 +75,7 @@ impl ProfileHandler{
             Err(e) => return Err(e),
         }
     }
+    // 解析本地的software数据文件。在初始化时调用
     pub fn analyse_software_file (&self, path : String) -> Result<Vec<Arc<Software>>, SoftwareManagerError>{
         let toml_content = match fs::read_to_string(path) {
             Ok(c) => c,
@@ -89,6 +87,7 @@ impl ProfileHandler{
         };
         return softwares.to_softwares();
     }
+    // 解析本地的package数据文件。在初始化时调用
     pub fn analyse_package_file (&self, path : String) -> Result<Vec<Arc<Package>>, PackageManagerError>{
         let toml_content = match fs::read_to_string(path) {
             Ok(c) => c,
