@@ -1,0 +1,13 @@
+[[software_temp]]
+archive = "testB"
+version = "1.0.1"
+dependencies = ["testC-1.0.1"]
+reference_count = 1
+status = "Available"
+
+[[software_temp]]
+archive = "testA"
+version = "1.0.1"
+dependencies = ["testC-1.0.1", "testB-1.0.1"]
+reference_count = 1
+status = "Available"

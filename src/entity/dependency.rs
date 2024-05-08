@@ -1,9 +1,14 @@
 use semver::{Error, Version};
 use serde_derive::{Deserialize, Serialize};
+use std::path::Component;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::hash::{Hash, Hasher};
 use crate::entity::version_wrapper::VersionWrapper;
+use crate::error::software_error::SoftwareManagerError;
+
+use super::version_wrapper;
+
 
 #[derive(Clone, Debug, Deserialize,Serialize,PartialEq, Eq,Hash)]
 pub struct Dependency {
@@ -26,40 +31,46 @@ pub struct BootstrapConfigurationTemp {
     depends : Vec<String>,
     recommends : Vec<String>
 }
-#[derive(Clone, Debug, Deserialize,Serialize,PartialEq, Eq,Hash)]
+#[derive(Clone, Debug,PartialEq, Eq,Hash)]
 pub struct BootstrapConfiguration {
-    depends : Vec<Dependency>,
-    recommends : Vec<Dependency>
+    depends : Vec<Arc<Dependency>>,
+    recommends : Vec<Arc<Dependency>>
 }
 impl BootstrapConfiguration {
-    pub fn from_temp(temp : BootstrapConfigurationTemp) -> Result<BootstrapConfiguration,Error> {
-        let depends : Vec<Dependency> = Vec::new();
-        let recommends : Vec<Dependency> = Vec::new();
-        for dep in temp.depends {
-            let parts : Vec<&str> = &dep.split("-").collect();
+    pub fn get_depends(&self) -> Vec<Arc<Dependency>>{
+        return self.depends.clone();
+    }
+    pub fn get_recommends(&self) -> Vec<Arc<Dependency>>{
+        return self.recommends.clone();
+    }
+    pub fn from_temp(temp : BootstrapConfigurationTemp) -> Result<BootstrapConfiguration,SoftwareManagerError> {
+        let mut depends : Vec<Arc<Dependency>> = Vec::new();
+        let mut recommends : Vec<Arc<Dependency>> = Vec::new();
+        for dep_str in temp.depends {
+            let parts : Vec<&str> = dep_str.split('-').collect();
             if parts.len() < 2 {
-                return Error;
+                return Err(SoftwareManagerError::ParseDependencyError(dep_str));
             }
             match Version::from_str(parts[1]) {
                 Ok(version) => {
-                    depends.push(Dependency::new(parts[0].to_string(), VersionWrapper::new(version)))
+                    depends.push(Arc::new(Dependency::new(parts[0].to_string(), VersionWrapper::new(version))))
                 },
                 Err(e) => {
-                    return Err(e);
+                    return Err(SoftwareManagerError::ParseDependencyError(e.to_string()));
                 }
             }
         }
         for dep in temp.recommends {
-            let parts : Vec<&str> = &dep.split("-").collect();
+            let parts : Vec<&str> = dep.split('-').collect();
             if parts.len() < 2 {
-                return Error;
+                return Err(SoftwareManagerError::ParseDependencyError(dep));
             }
             match Version::from_str(parts[1]) {
                 Ok(version) => {
-                    recommends.push(Dependency::new(parts[0].to_string(), VersionWrapper::new(version)))
+                    recommends.push(Arc::new(Dependency::new(parts[0].to_string(), VersionWrapper::new(version))))
                 },
                 Err(e) => {
-                    return Err(e);
+                    return Err(SoftwareManagerError::ParseDependencyError(e.to_string()));
                 }
             }
         }
@@ -82,21 +93,19 @@ pub struct Package
     pub architecture: String,
     pub download : String,
     pub others: String,
-    pub dependencies : Vec<Dependency>,
 }
 impl Package{
-    fn new () -> Package{
-        return Package{
-            archive: String::new(),
-            version_wrapper: VersionWrapper::new(Version::new(0, 0, 0)),
-            component: String::new(),
-            origin: String::new(),
-            label: String::new(),
-            architecture: String::new(),
-            download : String::new(),
-            others: String::new(),
-            dependencies : Vec::new(),
-        };
+    pub fn new (archive: String, version_wrapper: VersionWrapper, component: String, origin: String, label: String, architecture: String, download: String, others: String) -> Package{
+        Package{
+            archive,
+            version_wrapper,
+            component,
+            origin,
+            label,
+            architecture,
+            download,
+            others
+        }
     }
     pub fn to_string(&self) -> String{
         return format!("{}-{}", self.archive, self.version_wrapper.to_string());
@@ -129,6 +138,11 @@ impl PackageList{
             dependencies: vec,
         }
     }
+}
+#[derive(Clone, Debug, Deserialize,Serialize,PartialEq, Eq,Hash)]
+pub struct PackageListTemp
+{
+    pub packages: Vec<Package>
 }
 
 #[derive(Debug)]

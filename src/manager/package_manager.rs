@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt, hash::{Hash, Hasher}, ops::Deref, str::From
 use lazy_static::lazy_static;
 use semver::Version;
 use serde_derive::{Deserialize, Serialize};
-use crate::{entity::dependency::{Configuration, Package, PackageList}, tool::network_module::download_unit};
+use crate::{entity::dependency::{self, Configuration, Dependency, Package, PackageList}, tool::{network_module::download_unit, resolve_file::profile_handler}};
 use crate::entity::software::{Software};
 use crate::entity::version_wrapper::VersionWrapper;
 
@@ -10,14 +10,43 @@ use crate::entity::version_wrapper::VersionWrapper;
 
 
 pub enum PackageManagerError {
-    // Configuration重复存在
-    DuplicateConfiguration,
-    // 配置不存在
-    ConfigurationNotFound(String),
-    // 更新失败
-    ConfigurationUpdateFailed,
+    // 重复存在
+    PackageInstalled,
+    // 不存在
+    PackageNotFound(String),
     // 加锁失败
-    ConfigurationLockFailed,
+    PackageLockFailed,
+    // 安装失败
+    PackageInstallFailed,
+    // 卸载失败
+    PackageUninstallFailed,
+    // 读取本地文件错误
+    ReadLocalPackageFileError(String),
+}
+impl PackageManagerError {
+    pub fn to_string(&self) -> String {
+        match self {
+            PackageManagerError::PackageInstalled => {
+                return "Package already installed".to_string();
+            },
+            PackageManagerError::PackageNotFound(s) => {
+                return format!("Package {} not found", s);
+            },
+            PackageManagerError::PackageLockFailed => {
+                return "Package lock failed".to_string();
+            },
+            PackageManagerError::PackageInstallFailed => {
+                return "Package install failed".to_string();
+            }
+            PackageManagerError::PackageUninstallFailed => {
+                return "Package uninstall failed".to_string();
+            }
+            PackageManagerError::ReadLocalPackageFileError(s) => {
+                return format!("Read local package file error {}", s);
+            }
+
+        }
+    }
 }
 // 底层包管理器作为单例
 lazy_static! {
@@ -25,7 +54,7 @@ lazy_static! {
 }
 #[inline(always)]
 #[allow(dead_code)]
-pub(super) fn package_manager() -> &'static Arc<Mutex<PackageManager>> {
+pub fn package_manager() -> &'static Arc<Mutex<PackageManager>> {
     &PACKAGE_MANAGER
 }
 // 内部类
@@ -46,32 +75,56 @@ pub struct PackageManager {
     // 保存所有包
     packages : Vec<Arc<Package>>,
     // 用map记录
-    package_hashmap : HashMap<str, Arc<Package>>,
+    package_hashmap : HashMap<String, Arc<Package>>,
     
 }
 impl PackageManager {
     fn new() -> PackageManager {
-        // todo 初始化时检查数据文件，没有则创建，有则根据文件恢复数据
-        return PackageManager{ packages : Vec::new() ,  package_hashmap : HashMap::new()};
+        // 初始化时检查数据文件，没有则创建，有则根据文件恢复数据
+        let path = "database/package_data.toml";
+        let packages = match profile_handler().analyse_package_file(path.to_string()) {
+            Ok(s) => s,
+            Err(err) => {
+                panic!("{}",err.to_string());
+            }
+        };
+        let mut map : HashMap<String, Arc<Package>> = HashMap::new();
+        for package in packages.iter() {
+            let str = format!("{}-{}", package.archive, package.version_wrapper.to_string());
+            map.insert(str, package.clone());
+        }
+        return PackageManager{ packages : packages ,  package_hashmap : map};
     }
-    pub fn install_package(&mut self, package : Arc<Package>) -> Result<(),PackageManagerError> {
+    fn get_package(&self, dependency: Arc<Dependency>) -> Result<Arc<Package>, PackageManagerError> {
+        // 网络获取详细信息
+        return download_unit().get_package_information(dependency);
+    }
+    pub fn install_package(&mut self, dependency: Arc<Dependency>) -> Result<(),PackageManagerError> {
+        // 安装地址
         let path = "/database";
-        // 调用下载器下载包并解压
-        match download_unit().download_software(package, path) {
-            Ok(_) => {
-                self.packages.push(package);
-                self.package_hashmap.insert(package.to_string(), package);
-            },
+        let package = match self.get_package(dependency.clone()) {
+            Ok(p) => p,
             Err(e) => {
                 return Err(e);
             }
+        };
+        // 调用下载器下载包并解压
+        match download_unit().download_software(package.clone(), path) {
+            Ok(_) => {
+                self.packages.push(package.clone());
+                self.package_hashmap.insert(package.to_string(), package);
+                // doto 添加到数据文件中
+            },
+            Err(e) => {
+                return Err(PackageManagerError::PackageInstallFailed);
+            }
         }
         // todo 执行安装脚本
-        // doto 添加到数据文件中
+        
         return Ok(());
     }
 
-    pub fn uninstall_package(&mut self, archive : String, version : VersionWrapper) -> Result<(),PackageManagerError> {
+    pub fn uninstall_package(& self, archive : String, version : VersionWrapper) -> Result<(),PackageManagerError> {
         // todo 卸载软件，执行卸载脚本，删除文件
         // todo 修改数据文件
         return Ok(());
@@ -132,7 +185,7 @@ impl ConfigurationUpdateUnit {
     pub fn get_new_configuration(&self, configuration : Arc<Configuration>, mode : ConfigurationUpdateMode) -> Result<PackageList,PackageManagerError>{
         let inner_guard = configuration.inner();
         if inner_guard.is_none() {
-            return Err(PackageManagerError::ConfigurationLockFailed);
+            return Err(PackageManagerError::PackageLockFailed);
         }
         let guard = inner_guard.unwrap();
         // todo 上网更新

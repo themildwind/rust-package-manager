@@ -1,0 +1,19 @@
+[[packages]]
+archive = "testA"
+version_wrapper = "1.0.1"
+component = "component"
+origin = "origin"
+label = "label"
+architecture = "architecture"
+download = "download"
+others = "others"
+
+[[packages]]
+archive = "testB"
+version_wrapper = "1.0.1"
+component = "component"
+origin = "origin"
+label = "label"
+architecture = "architecture"
+download = "download"
+others = "others"

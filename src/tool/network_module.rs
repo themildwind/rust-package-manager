@@ -9,11 +9,12 @@ use std::{
     collections::{HashMap, HashSet, LinkedList}, fs::File, io::Write, ptr::null, result, sync::{Arc, Mutex, MutexGuard}
 };
 use serde_json::{Value, json};
-use crate::{entity::dependency::{Package, PackageList}, manager::software_manager::SoftwareManagerError};
+use crate::{entity::dependency::{self, Dependency, Package, PackageList}, manager::{package_manager::PackageManagerError}};
+use crate::error::software_error::SoftwareManagerError;
 use crate::entity::software::{Software};
 use crate::entity::version_wrapper::VersionWrapper;
 
-use super::run_profile::profile_handler;
+use super::resolve_file::profile_handler;
 //下载组件
 lazy_static! {
     static ref DOWNLOAD_UNIT: Arc<DownloadUnit> = Arc::new(DownloadUnit::new());
@@ -27,7 +28,7 @@ pub fn download_unit() -> &'static Arc<DownloadUnit> {
 pub struct DownloadUnit {}
 impl DownloadUnit {
     // todo 设置目标地址，下载器下载文件且解压
-    pub fn download_software(&self, package: Arc<Package>, target_path: &str) -> Result<Arc<Software>, SoftwareManagerError> {
+    pub fn download_software(&self, package: Arc<Package>, target_path: &str) -> Result<(), SoftwareManagerError> {
         // 创建一个新的 tokio 运行时环境
         let rt = Runtime::new().unwrap();    
         // 在异步上下文中执行异步函数并等待结果返回
@@ -37,9 +38,9 @@ impl DownloadUnit {
         return result;
     }
     // 
-    async fn download_software_async(&self, dependency: Arc<Package>, target_path: &str) -> Result<Arc<Software>, SoftwareManagerError> {
+    async fn download_software_async(&self, package: Arc<Package>, target_path: &str) -> Result<(), SoftwareManagerError> {
         // 找到下载地址
-        let downloadsite = dependency.download();
+        let downloadsite = package.download();
         //
         let client = reqwest::Client::new();
         let response = match client.get(downloadsite).send().await{
@@ -66,12 +67,12 @@ impl DownloadUnit {
             }
         };
         match decompress_unit().install(decoded_data, target_path) {
-            Ok(o) => return Ok(Software::new(target_path.to_string(), dependency)),
-            Err(err) => return Err(err),
+            Ok(o) => return Ok(()),
+            Err(err) => return Err(SoftwareManagerError::from(err)),
         } 
     }
     // 获取配置文件
-    pub fn get_dependency_list(&self, dependency: Arc<Package>) -> Result<PackageList, SoftwareManagerError> {
+    pub fn get_dependency_list(&self, dependency: Arc<Dependency>) -> Result<Vec<Arc<Dependency>>, SoftwareManagerError> {
         // 创建一个新的 tokio 运行时环境
         let rt = Runtime::new().unwrap();    
         // 在异步上下文中执行异步函数并等待结果返回
@@ -80,8 +81,8 @@ impl DownloadUnit {
         });
         return result;
     }
-    async fn get_dependency_list_async(&self, dependency: Arc<Package>) -> Result<PackageList, SoftwareManagerError> {
-        let url = format!("http://127.0.0.1:8080/api/v1/softwares/configuration?archive={}&version={}", dependency.archive, dependency.version_wrapper.version.to_string());
+    async fn get_dependency_list_async(&self, dependency: Arc<Dependency>) -> Result<Vec<Arc<Dependency>>, SoftwareManagerError> {
+        let url = format!("http://127.0.0.1:8080/api/v1/dependency/get?archive={}&version={}", dependency.archive, dependency.version_wrapper.version.to_string());
         let client = reqwest::Client::new();
         let response = match client.get(url).send().await{
             Ok(r) => r,
@@ -91,7 +92,34 @@ impl DownloadUnit {
             Ok(f) => f,
             Err(err) => return Err(SoftwareManagerError::DownloadError(err.to_string())),
         };
-        return profile_handler().analyse_string(file);
+        return profile_handler().from_string_to_dependencies(file);
+    }
+    // 获取软件包详细信息
+    pub fn get_package_information(&self, dependency: Arc<Dependency>) -> Result<Arc<Package>, PackageManagerError> {
+        // 创建一个新的 tokio 运行时环境
+        let rt = Runtime::new().unwrap();    
+        // 在异步上下文中执行异步函数并等待结果返回
+        let result = rt.block_on(async {
+            self.get_package_information_async(dependency).await
+        });
+        return result;
+    }
+    async fn get_package_information_async(&self, dependency: Arc<Dependency>) -> Result<Arc<Package>, PackageManagerError> {
+        let url = format!("http://127.0.0.1:8080/api/v1/software/information?archive={}&version={}", dependency.archive, dependency.version_wrapper.version.to_string());
+        let client = reqwest::Client::new();
+        let response = match client.get(url).send().await{
+            Ok(r) => r,
+            Err(err) => return Err(PackageManagerError::PackageInstallFailed),
+        };
+        let file  = match response.text().await {
+            Ok(f) => f,
+            Err(err) => return Err(PackageManagerError::PackageInstallFailed),
+        };
+        let package : Package = match toml::from_str(&file) {
+            Ok(p) => p,
+            Err(e) => return Err(PackageManagerError::PackageInstallFailed),
+        };
+        return Ok(Arc::new(package));
     }
     pub fn new() -> DownloadUnit {
         return DownloadUnit {};
@@ -114,16 +142,16 @@ impl DecompressUnit {
     pub fn new() -> DecompressUnit {
         return DecompressUnit {};
     }
-    pub fn install(&self, decoded_data : Vec<u8>, target_path: &str) -> Result<(), SoftwareManagerError>{
+    pub fn install(&self, decoded_data : Vec<u8>, target_path: &str) -> Result<(), PackageManagerError>{
         let compressed_data: Vec<u8> = decoded_data;
         // 将数据写入文件
-        let mut file = match File::create(target_path+"output.tar") {
+        let mut file = match File::create(target_path.to_string()+"output.tar") {
             Ok(f) => f,
-            Err(err) => return Err(SoftwareManagerError::InstallDependencyError(err.to_string())),
+            Err(err) => return Err(PackageManagerError::PackageInstallFailed),
         };
         match file.write_all(&compressed_data) {
             Ok(r) => return Ok(()),
-            Err(err) => return Err(SoftwareManagerError::InstallDependencyError(err.to_string())),
+            Err(err) => return Err(PackageManagerError::PackageInstallFailed),
         };
     }
 }

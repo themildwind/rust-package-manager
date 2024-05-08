@@ -1,13 +1,13 @@
 use std::{collections::LinkedList, sync::Arc};
 
-use crate::entity::dependency::Package;
+use crate::entity::dependency::{Dependency, Package};
 use crate::manager::package_manager::PackageManagerError;
-use crate::manager::software_manager::SoftwareManagerError;
+use crate::error::software_error::SoftwareManagerError;
 
 #[derive(Debug)]
 pub enum GlobalError {
     // 循环依赖
-    CircularDependency(LinkedList<Arc<Package>>),
+    CircularDependency(LinkedList<Arc<Dependency>>),
     // 依赖不存在
     DependencyNotFound(Arc<Package>),
     // 依赖包已经下载
@@ -42,26 +42,30 @@ impl From<SoftwareManagerError> for GlobalError {
     fn from(error: SoftwareManagerError) -> Self {
         match error {
             SoftwareManagerError::CircularDependency(l) => GlobalError::CircularDependency(l),
-            SoftwareManagerError::DependencyNotFound(d) => GlobalError::DependencyNotFound(d),
-            SoftwareManagerError::DependencyAlreadyInstalled(d) => GlobalError::DependencyAlreadyInstalled(d),
-            SoftwareManagerError::DependencyNotInstalled(d) => GlobalError::DependencyNotFound(d),
+            SoftwareManagerError::SoftwareNotFound(d) => GlobalError::DependencyNotFound(d),
             SoftwareManagerError::DownloadError(d) => GlobalError::DownloadError(d),
-            SoftwareManagerError::InstallDependencyError(d) => GlobalError::InstallDependencyError(d),
             SoftwareManagerError::ParseDependencyError(d) => GlobalError::ParseDependencyError(d),
-            SoftwareManagerError::RemoveDependencyError(s) => GlobalError::RemoveDependencyError(s),
             SoftwareManagerError::SoftwareLockError(s) => GlobalError::SoftwareLockError(s),
-            SoftwareManagerError::ReadLocalFileError(s) => GlobalError::ReadLocalFileError(s),
-            
+            SoftwareManagerError::ReadLocalSoftwareFileError(_) => todo!(),
+            SoftwareManagerError::PackageInstalled => todo!(),
+            SoftwareManagerError::PackageNotFound(_) => todo!(),
+            SoftwareManagerError::PackageLockFailed => todo!(),
+            SoftwareManagerError::PackageInstallFailed => todo!(),
+            SoftwareManagerError::PackageUninstallFailed => todo!(),
+            SoftwareManagerError::ReadLocalPackageFileError(_) => todo!(),
+            SoftwareManagerError::ReadLocalOtherFileError(_) => todo!(),
         }
     }
 }
 impl From<PackageManagerError> for GlobalError {
     fn from(error: PackageManagerError) -> Self {
         match error {
-            PackageManagerError::ConfigurationLockFailed => GlobalError::ConfigurationLockFailed,
-            PackageManagerError::ConfigurationNotFound(s) => GlobalError::ConfigurationNotFound(s),
-            PackageManagerError::ConfigurationUpdateFailed => GlobalError::ConfigurationUpdateFailed,
-            PackageManagerError::DuplicateConfiguration => GlobalError::DuplicateConfiguration,
+            PackageManagerError::PackageInstalled => todo!(),
+            PackageManagerError::PackageNotFound(_) => todo!(),
+            PackageManagerError::PackageLockFailed => todo!(),
+            PackageManagerError::PackageInstallFailed => todo!(),
+            PackageManagerError::PackageUninstallFailed => todo!(),
+            PackageManagerError::ReadLocalPackageFileError(_) => todo!(),
         }
     }
 }
